@@ -18,15 +18,45 @@ fn validate_string(input: &str) -> Result<(), validation::ValidationError> {
     Ok(())
 }
 
+fn validate_vendor(_input: &str) -> Result<(), validation::ValidationError> {
+    Ok(())
+}
+
+fn validate_toolkind(kind: &ToolKind) -> Result<(), validation::ValidationError> {
+    if matches!(kind, ToolKind::Hammer) {
+        return Err(ValidationError::new("Tool must not be a hammer"));
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+pub enum ToolKind {
+    Hammer,
+    ScrewDriver,
+}
+
 #[derive(Debug)]
 pub struct Tool {
     pub vendor: Option<String>,
     pub name: Option<String>,
+    pub kind: ToolKind,
 }
 
 impl Validate for Tool {
     fn validate(&self, _version: validation::SpecVersion) -> Result<(), ValidationErrors> {
-        todo!()
+        let mut result = std::result::Result::Ok(());
+
+        if let Some(vendor) = &self.vendor {
+            result = ValidationErrors::merge_field(result, "vendor", validate_vendor(vendor));
+        }
+
+        if let Some(name) = &self.name {
+            result = ValidationErrors::merge_field(result, "name", validate_string(name));
+        }
+
+        result = ValidationErrors::merge_enum(result, "kind", validate_toolkind(&self.kind));
+
+        result
     }
 }
 
@@ -39,6 +69,14 @@ pub struct Metadata {
 impl Validate for Metadata {
     fn validate(&self, version: SpecVersion) -> Result<(), ValidationErrors> {
         let mut result = std::result::Result::Ok(());
+
+        if let Some(tools) = &self.tools {
+            result = ValidationErrors::merge_list(
+                result,
+                "tools",
+                tools.iter().map(|tool| tool.validate(version)).collect(),
+            );
+        }
 
         match version {
             SpecVersion::V1_4 => {
@@ -82,7 +120,8 @@ impl Validate for Bom {
         };
 
         if let Some(metadata) = &self.meta_data {
-            result = ValidationErrors::merge(result, "meta_data", metadata.validate(version));
+            result =
+                ValidationErrors::merge_struct(result, "meta_data", metadata.validate(version));
         }
 
         result
@@ -96,7 +135,7 @@ pub fn validate_bom(version: SpecVersion, bom: Bom) -> Result<(), ValidationErro
 
 #[cfg(test)]
 mod tests {
-    use crate::{validate_bom, validation::SpecVersion, Bom, Metadata, Tool};
+    use crate::{validate_bom, validation::SpecVersion, Bom, Metadata, Tool, ToolKind};
 
     #[test]
     fn validate_succeeds() {
@@ -107,11 +146,12 @@ mod tests {
                 tools: Some(vec![Tool {
                     vendor: Some(String::from("Vendor")),
                     name: Some(String::from("dig")),
+                    kind: ToolKind::ScrewDriver,
                 }]),
             }),
         };
 
-        assert!(validate_bom(SpecVersion::V1_3, bom).is_ok());
+        assert!(dbg!(validate_bom(SpecVersion::V1_3, bom)).is_ok());
     }
 
     #[test]
@@ -120,10 +160,18 @@ mod tests {
             serial_number: Some("1234".to_string()),
             meta_data: Some(Metadata {
                 timestamp: Some(String::from("2024-01-02")),
-                tools: Some(vec![Tool {
-                    vendor: Some(String::from("Vendor")),
-                    name: Some(String::from("dig")),
-                }]),
+                tools: Some(vec![
+                    Tool {
+                        vendor: Some(String::from("Vendor")),
+                        name: Some(String::from("delv")),
+                        kind: ToolKind::ScrewDriver,
+                    },
+                    Tool {
+                        vendor: Some(String::from("Vendor")),
+                        name: Some(String::from("dig")),
+                        kind: ToolKind::Hammer,
+                    },
+                ]),
             }),
         };
 

@@ -1,16 +1,18 @@
 use std::collections::BTreeMap;
 
-use indexmap::IndexMap;
+use indexmap::{map::Entry::Vacant, IndexMap};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum SpecVersion {
     V1_3,
     V1_4,
     V1_5,
 }
 
+pub type ValidationResult = Result<(), ValidationErrors>;
+
 pub trait Validate {
-    fn validate(&self, version: SpecVersion) -> Result<(), ValidationErrors>;
+    fn validate(&self, version: SpecVersion) -> ValidationResult;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,7 +59,7 @@ impl ValidationErrors {
         parent: Result<(), ValidationErrors>,
         field_name: &str,
         error: Result<(), ValidationError>,
-    ) -> Result<(), ValidationErrors> {
+    ) -> ValidationResult {
         match error {
             Ok(()) => parent,
             Err(error) => {
@@ -71,34 +73,91 @@ impl ValidationErrors {
         }
     }
 
-    /// Returns new [`ValidationErrors`] with results for all nested fields.
-    pub fn merge(
+    /// Returns new [`ValidationErrors`] with possible validation error for enum.
+    pub fn merge_enum(
         parent: Result<(), ValidationErrors>,
-        struct_name: &str,
-        child: Result<(), ValidationErrors>,
-    ) -> Result<(), ValidationErrors> {
-        match child {
+        enum_name: &str,
+        enum_error: Result<(), ValidationError>,
+    ) -> ValidationResult {
+        println!("Validation::merge_enum: {:?}", enum_error);
+        match enum_error {
             Ok(()) => parent,
-            Err(errors) => {
+            Err(error) => {
                 parent
                     .and_then(|_| Err(ValidationErrors::new()))
                     .map_err(|mut parent_errors| {
-                        parent_errors.add_struct(struct_name, errors);
+                        parent_errors.add_enum(enum_name, error);
                         parent_errors
                     })
             }
         }
     }
 
-    /// Adds a new struct object with given name. The given struct needs to implement [`Validate`].
-    pub fn add_struct(&mut self, struct_name: &str, validation_errors: ValidationErrors) {
-        self.inner
-            .entry(struct_name.to_string())
-            .or_insert_with(|| ValidationErrorsKind::Struct(Box::new(validation_errors)));
+    /// Returns new [`ValidationErrors`] with results for all nested fields.
+    pub fn merge_struct(
+        parent: Result<(), ValidationErrors>,
+        struct_name: &str,
+        child: Result<(), ValidationErrors>,
+    ) -> ValidationResult {
+        match child {
+            Ok(()) => parent,
+            Err(errors) => {
+                parent
+                    .and_then(|_| Err(ValidationErrors::new()))
+                    .map_err(|mut parent_errors| {
+                        parent_errors.add_nested(
+                            struct_name,
+                            ValidationErrorsKind::Struct(Box::new(errors)),
+                        );
+                        parent_errors
+                    })
+            }
+        }
+    }
+
+    pub fn merge_list(
+        parent: Result<(), ValidationErrors>,
+        field_name: &str,
+        children: Vec<Result<(), ValidationErrors>>,
+    ) -> ValidationResult {
+        let child_errors = children
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, result)| result.err().map(|errors| (index, Box::new(errors))))
+            .collect::<BTreeMap<_, _>>();
+
+        if child_errors.is_empty() {
+            parent
+        } else {
+            parent
+                .and_then(|_| Err(ValidationErrors::new()))
+                .map_err(|mut parent_errors| {
+                    parent_errors.add_nested(field_name, ValidationErrorsKind::List(child_errors));
+                    parent_errors
+                })
+        }
+    }
+
+    /// Adds a nested object kind
+    fn add_nested(&mut self, nested_name: &str, errors_kind: ValidationErrorsKind) {
+        if let Vacant(entry) = self.inner.entry(nested_name.to_string()) {
+            entry.insert(errors_kind);
+        } else {
+            panic!("Attempt to replace non-empty nested entry")
+        }
+    }
+
+    /// Adds a single [`ValidationError`] for an enum variant.
+    fn add_enum(&mut self, enum_name: &str, validation_error: ValidationError) {
+        if let Vacant(entry) = self.inner.entry(enum_name.to_string()) {
+            entry.insert(ValidationErrorsKind::Enum(validation_error));
+        } else {
+            panic!("Attempt to replace non-empty enum entry")
+        }
     }
 
     /// Adds a single field [`ValidationError`].
-    pub fn add_field(&mut self, field_name: &str, validation_error: ValidationError) {
+    fn add_field(&mut self, field_name: &str, validation_error: ValidationError) {
         if let ValidationErrorsKind::Field(ref mut vec) = self
             .inner
             .entry(field_name.to_string())
