@@ -10,11 +10,7 @@ pub enum SpecVersion {
 }
 
 pub trait Validate {
-    fn validate(
-        &self,
-        version: SpecVersion,
-        parent: Result<(), ValidationErrors>,
-    ) -> Result<(), ValidationErrors>;
+    fn validate(&self, version: SpecVersion) -> Result<(), ValidationErrors>;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56,32 +52,62 @@ impl ValidationErrors {
         }
     }
 
-    /// Returns new [`ValidationContext`] with results for all nested fields.
-    pub fn merge(
-        field: &str,
-        child: Result<(), ValidationErrors>,
+    /// Returns [`ValidationErrors`] with possible validation error
+    pub fn merge_field(
+        parent: Result<(), ValidationErrors>,
+        field_name: &str,
+        error: Result<(), ValidationError>,
     ) -> Result<(), ValidationErrors> {
-        todo!("")
-    }
-
-    /// Adds a single [`ValidationError`] to a named struct field.
-    pub fn add_field(&mut self, field: &str, error: ValidationError) {
-        if let ValidationErrorsKind::Field(ref mut vec) = self
-            .inner
-            .entry(field.to_string())
-            .or_insert_with(|| ValidationErrorsKind::Field(vec![]))
-        {
-            vec.push(error);
-        } else {
-            panic!("Found a non-field ValidationErrorsKind");
+        match error {
+            Ok(()) => parent,
+            Err(error) => {
+                parent
+                    .and_then(|_| Err(ValidationErrors::new()))
+                    .map_err(|mut parent_errors| {
+                        parent_errors.add_field(field_name, error);
+                        parent_errors
+                    })
+            }
         }
     }
 
-    /// Adds a single [`ValidationError`] associated with an enum variant.
-    pub fn add_enum(&mut self, variant: &str, error: ValidationError) {
+    /// Returns new [`ValidationErrors`] with results for all nested fields.
+    pub fn merge(
+        parent: Result<(), ValidationErrors>,
+        struct_name: &str,
+        child: Result<(), ValidationErrors>,
+    ) -> Result<(), ValidationErrors> {
+        match child {
+            Ok(()) => parent,
+            Err(errors) => {
+                parent
+                    .and_then(|_| Err(ValidationErrors::new()))
+                    .map_err(|mut parent_errors| {
+                        parent_errors.add_struct(struct_name, errors);
+                        parent_errors
+                    })
+            }
+        }
+    }
+
+    /// Adds a new struct object with given name. The given struct needs to implement [`Validate`].
+    pub fn add_struct(&mut self, struct_name: &str, validation_errors: ValidationErrors) {
         self.inner
-            .entry(variant.to_string())
-            .or_insert_with(|| ValidationErrorsKind::Enum(error));
+            .entry(struct_name.to_string())
+            .or_insert_with(|| ValidationErrorsKind::Struct(Box::new(validation_errors)));
+    }
+
+    /// Adds a single field [`ValidationError`].
+    pub fn add_field(&mut self, field_name: &str, validation_error: ValidationError) {
+        if let ValidationErrorsKind::Field(ref mut vec) = self
+            .inner
+            .entry(field_name.to_string())
+            .or_insert_with(|| ValidationErrorsKind::Field(vec![]))
+        {
+            vec.push(validation_error);
+        } else {
+            panic!("Found a non-field ValidationErrorsKind");
+        }
     }
 
     pub fn has_error(result: &Result<(), ValidationErrors>, field: &str) -> bool {
@@ -102,7 +128,7 @@ impl ValidationErrors {
 
 #[cfg(test)]
 mod tests {
-    use super::{ValidationErrors, ValidationError};
+    use super::{ValidationError, ValidationErrors};
 
     #[test]
     fn has_error() {

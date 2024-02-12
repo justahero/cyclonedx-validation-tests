@@ -1,6 +1,6 @@
 mod validation;
 
-use validation::{SpecVersion, Validate, ValidationErrors, ValidationError};
+use validation::{SpecVersion, Validate, ValidationError, ValidationErrors};
 
 fn validate_timestamp(input: &str) -> Result<(), validation::ValidationError> {
     if input.contains("a") {
@@ -25,11 +25,7 @@ pub struct Tool {
 }
 
 impl Validate for Tool {
-    fn validate(
-        &self,
-        version: validation::SpecVersion,
-        parent: Result<(), ValidationErrors>,
-    ) -> Result<(), ValidationErrors> {
+    fn validate(&self, _version: validation::SpecVersion) -> Result<(), ValidationErrors> {
         todo!()
     }
 }
@@ -41,12 +37,31 @@ pub struct Metadata {
 }
 
 impl Validate for Metadata {
-    fn validate(
-        &self,
-        version: SpecVersion,
-        parent: Result<(), ValidationErrors>,
-    ) -> Result<(), ValidationErrors> {
-        todo!()
+    fn validate(&self, version: SpecVersion) -> Result<(), ValidationErrors> {
+        let mut result = std::result::Result::Ok(());
+
+        match version {
+            SpecVersion::V1_4 => {
+                if let Some(timestamp) = &self.timestamp {
+                    result = ValidationErrors::merge_field(
+                        result,
+                        "timestamp",
+                        validate_string(&timestamp),
+                    );
+                }
+            }
+            _ => {
+                if let Some(timestamp) = &self.timestamp {
+                    result = ValidationErrors::merge_field(
+                        result,
+                        "timestamp",
+                        validate_timestamp(&timestamp),
+                    );
+                }
+            }
+        }
+
+        result
     }
 }
 
@@ -58,30 +73,25 @@ pub struct Bom {
 
 /// The implementation should be easy to digest
 impl Validate for Bom {
-    fn validate(
-        &self,
-        version: validation::SpecVersion,
-        parent: Result<(), ValidationErrors>,
-    ) -> Result<(), ValidationErrors> {
-        // TODO: make this nice
-        /*
-        match version {
-            SpecVersion::V1_5 => {
-                ValidationContextBuilder::new()
-                    .add_field("serial_number", validate_string(self.serial_number))
-                    .add_struct("metadata", self.meta_data.validate())
-                    .into()
-            },
-            _ => { todo!() }
+    fn validate(&self, version: validation::SpecVersion) -> Result<(), ValidationErrors> {
+        let mut result = std::result::Result::Ok(());
+
+        if let Some(number) = &self.serial_number {
+            result =
+                ValidationErrors::merge_field(result, "serial_number", validate_string(&number));
+        };
+
+        if let Some(metadata) = &self.meta_data {
+            result = ValidationErrors::merge(result, "meta_data", metadata.validate(version));
         }
-        */
-        unimplemented!()
+
+        result
     }
 }
 
 /// Validates the bom according to a given [`SpecVersion`].
 pub fn validate_bom(version: SpecVersion, bom: Bom) -> Result<(), ValidationErrors> {
-    bom.validate(version, std::result::Result::Ok(()))
+    bom.validate(version)
 }
 
 #[cfg(test)]
@@ -117,6 +127,6 @@ mod tests {
             }),
         };
 
-        assert!(validate_bom(SpecVersion::V1_4, bom).is_err());
+        assert!(dbg!(validate_bom(SpecVersion::V1_4, bom)).is_err());
     }
 }
