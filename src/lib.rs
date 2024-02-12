@@ -1,6 +1,6 @@
 mod validation;
 
-use validation::{SpecVersion, Validate, ValidationContext, ValidationError, ValidationErrors};
+use validation::{SpecVersion, Validate, ValidationContext, ValidationError, ValidationResult};
 
 fn validate_timestamp(input: &str) -> Result<(), validation::ValidationError> {
     if input.contains("a") {
@@ -43,7 +43,7 @@ pub struct Tool {
 }
 
 impl Validate for Tool {
-    fn validate(&self, _version: validation::SpecVersion) -> Result<(), ValidationErrors> {
+    fn validate(&self, _version: validation::SpecVersion) -> ValidationResult {
         ValidationContext::new()
             .add_field(
                 "vendor",
@@ -65,7 +65,7 @@ pub struct Metadata {
 }
 
 impl Validate for Metadata {
-    fn validate(&self, version: SpecVersion) -> Result<(), ValidationErrors> {
+    fn validate(&self, version: SpecVersion) -> ValidationResult {
         let children = self.tools.as_ref().map(|tools| {
             tools
                 .iter()
@@ -102,7 +102,7 @@ pub struct Bom {
 
 /// The implementation should be easy to digest
 impl Validate for Bom {
-    fn validate(&self, version: validation::SpecVersion) -> Result<(), ValidationErrors> {
+    fn validate(&self, version: validation::SpecVersion) -> ValidationResult {
         ValidationContext::new()
             .add_field(
                 "serial_number",
@@ -119,7 +119,7 @@ impl Validate for Bom {
 }
 
 /// Validates the bom according to a given [`SpecVersion`].
-pub fn validate_bom(version: SpecVersion, bom: Bom) -> Result<(), ValidationErrors> {
+pub fn validate_bom(version: SpecVersion, bom: Bom) -> ValidationResult {
     bom.validate(version)
 }
 
@@ -141,7 +141,7 @@ mod tests {
             }),
         };
 
-        assert!(dbg!(validate_bom(SpecVersion::V1_3, bom)).is_ok());
+        assert!(dbg!(validate_bom(SpecVersion::V1_3, bom)).passed());
     }
 
     #[test]
@@ -165,6 +165,6 @@ mod tests {
             }),
         };
 
-        assert!(dbg!(validate_bom(SpecVersion::V1_4, bom)).is_err());
+        assert!(dbg!(validate_bom(SpecVersion::V1_4, bom)).has_errors());
     }
 }

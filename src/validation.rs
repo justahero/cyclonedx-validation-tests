@@ -9,9 +9,27 @@ pub enum SpecVersion {
     V1_5,
 }
 
-/// TODO: the `Result` is not meant to be used as shortcut or to raise errors, rather to collect all errors
-/// avoid using `?` operator
-pub type ValidationResult = Result<(), ValidationErrors>;
+#[derive(Debug, Clone)]
+pub enum ValidationResult {
+    Passed,
+    Error(ValidationErrors),
+}
+
+impl Default for ValidationResult {
+    fn default() -> Self {
+        ValidationResult::Passed
+    }
+}
+
+impl ValidationResult {
+    pub fn passed(&self) -> bool {
+        matches!(self, ValidationResult::Passed)
+    }
+
+    pub fn has_errors(&self) -> bool {
+        matches!(self, ValidationResult::Error(_))
+    }
+}
 
 #[derive(Debug)]
 pub struct ValidationContext {
@@ -21,14 +39,14 @@ pub struct ValidationContext {
 impl ValidationContext {
     pub fn new() -> Self {
         Self {
-            state: std::result::Result::Ok(()),
+            state: ValidationResult::default(),
         }
     }
 
     pub fn add_field(self, field_name: &str, error: Option<Result<(), ValidationError>>) -> Self {
         if let Some(Err(error)) = error {
             Self {
-                state: ValidationErrors::merge_field(self.state, field_name, Err(error)),
+                state: ValidationErrors::merge_field(self.state, field_name, error),
             }
         } else {
             self
@@ -38,18 +56,14 @@ impl ValidationContext {
     pub fn add_enum(self, enum_name: &str, error: Option<Result<(), ValidationError>>) -> Self {
         if let Some(Err(error)) = error {
             Self {
-                state: ValidationErrors::merge_enum(self.state, enum_name, Err(error)),
+                state: ValidationErrors::merge_enum(self.state, enum_name, error),
             }
         } else {
             self
         }
     }
 
-    pub fn add_list(
-        self,
-        field_name: &str,
-        children: Option<Vec<Result<(), ValidationErrors>>>,
-    ) -> Self {
+    pub fn add_list(self, field_name: &str, children: Option<Vec<ValidationResult>>) -> Self {
         if let Some(children) = children {
             Self {
                 state: ValidationErrors::merge_list(self.state, field_name, children),
@@ -59,14 +73,10 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_struct(
-        self,
-        struct_name: &str,
-        errors: Option<Result<(), ValidationErrors>>,
-    ) -> Self {
-        if let Some(Err(errors)) = errors {
+    pub fn add_struct(self, struct_name: &str, errors: Option<ValidationResult>) -> Self {
+        if let Some(ValidationResult::Error(validation_errors)) = errors {
             Self {
-                state: ValidationErrors::merge_struct(self.state, struct_name, Err(errors)),
+                state: ValidationErrors::merge_struct(self.state, struct_name, validation_errors),
             }
         } else {
             self
@@ -128,84 +138,76 @@ impl ValidationErrors {
 
     /// Returns [`ValidationErrors`] with possible validation error
     pub fn merge_field(
-        parent: Result<(), ValidationErrors>,
+        parent: ValidationResult,
         field_name: &str,
-        error: Result<(), ValidationError>,
+        validation_error: ValidationError,
     ) -> ValidationResult {
-        match error {
-            Ok(()) => parent,
-            Err(error) => {
-                parent
-                    .and_then(|_| Err(ValidationErrors::new()))
-                    .map_err(|mut parent_errors| {
-                        parent_errors.add_field(field_name, error);
-                        parent_errors
-                    })
-            }
-        }
+        let mut errors = match parent {
+            ValidationResult::Passed => ValidationErrors::default(),
+            ValidationResult::Error(errors) => errors,
+        };
+
+        errors.add_field(field_name, validation_error);
+        ValidationResult::Error(errors)
     }
 
     /// Returns new [`ValidationErrors`] with possible validation error for enum.
     pub fn merge_enum(
-        parent: Result<(), ValidationErrors>,
+        parent: ValidationResult,
         enum_name: &str,
-        enum_error: Result<(), ValidationError>,
+        validation_error: ValidationError,
     ) -> ValidationResult {
-        match enum_error {
-            Ok(()) => parent,
-            Err(error) => {
-                parent
-                    .and_then(|_| Err(ValidationErrors::new()))
-                    .map_err(|mut parent_errors| {
-                        parent_errors.add_enum(enum_name, error);
-                        parent_errors
-                    })
-            }
-        }
+        let mut errors = match parent {
+            ValidationResult::Passed => ValidationErrors::default(),
+            ValidationResult::Error(errors) => errors,
+        };
+
+        errors.add_enum(enum_name, validation_error);
+        ValidationResult::Error(errors)
     }
 
     /// Returns new [`ValidationErrors`] with results for all nested fields.
     pub fn merge_struct(
-        parent: Result<(), ValidationErrors>,
+        parent: ValidationResult,
         struct_name: &str,
-        child: Result<(), ValidationErrors>,
+        validation_errors: ValidationErrors,
     ) -> ValidationResult {
-        match child {
-            Ok(()) => parent,
-            Err(errors) => {
-                parent
-                    .and_then(|_| Err(ValidationErrors::new()))
-                    .map_err(|mut parent_errors| {
-                        parent_errors.add_nested(
-                            struct_name,
-                            ValidationErrorsKind::Struct(Box::new(errors)),
-                        );
-                        parent_errors
-                    })
-            }
-        }
+        let mut errors = match parent {
+            ValidationResult::Passed => ValidationErrors::default(),
+            ValidationResult::Error(errors) => errors,
+        };
+
+        errors.add_nested(
+            struct_name,
+            ValidationErrorsKind::Struct(Box::new(validation_errors)),
+        );
+        ValidationResult::Error(errors)
     }
 
     pub fn merge_list(
-        parent: Result<(), ValidationErrors>,
+        parent: ValidationResult,
         field_name: &str,
-        children: Vec<Result<(), ValidationErrors>>,
+        children: Vec<ValidationResult>,
     ) -> ValidationResult {
         let child_errors = children
             .into_iter()
             .enumerate()
-            .filter_map(|(index, result)| result.err().map(|errors| (index, Box::new(errors))))
+            .filter_map(|(index, result)| match result {
+                ValidationResult::Passed => None,
+                ValidationResult::Error(errors) => Some((index, Box::new(errors))),
+            })
             .collect::<BTreeMap<_, _>>();
 
         if child_errors.is_empty() {
             parent
         } else {
-            parent
-                .and_then(|_| Err(ValidationErrors::new()))
-                .map_err(|mut parent_errors| {
-                    parent_errors.add_nested(field_name, ValidationErrorsKind::List(child_errors));
-                    parent_errors
-                })
+            let mut errors = match parent {
+                ValidationResult::Passed => ValidationErrors::default(),
+                ValidationResult::Error(errors) => errors,
+            };
+
+            errors.add_nested(field_name, ValidationErrorsKind::List(child_errors));
+            ValidationResult::Error(errors)
         }
     }
 
