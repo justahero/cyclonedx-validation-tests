@@ -1,6 +1,6 @@
 mod validation;
 
-use validation::{SpecVersion, Validate, ValidationError, ValidationErrors};
+use validation::{SpecVersion, Validate, ValidationBuilder, ValidationError, ValidationErrors};
 
 fn validate_timestamp(input: &str) -> Result<(), validation::ValidationError> {
     if input.contains("a") {
@@ -44,19 +44,11 @@ pub struct Tool {
 
 impl Validate for Tool {
     fn validate(&self, _version: validation::SpecVersion) -> Result<(), ValidationErrors> {
-        let mut result = std::result::Result::Ok(());
-
-        if let Some(vendor) = &self.vendor {
-            result = ValidationErrors::merge_field(result, "vendor", validate_vendor(vendor));
-        }
-
-        if let Some(name) = &self.name {
-            result = ValidationErrors::merge_field(result, "name", validate_string(name));
-        }
-
-        result = ValidationErrors::merge_enum(result, "kind", validate_toolkind(&self.kind));
-
-        result
+        ValidationBuilder::new()
+            .add_field("vendor", self.vendor.as_ref().map(|vendor| validate_vendor(&vendor)))
+            .add_field("name", self.name.as_ref().map(|name| validate_string(&name)))
+            .add_enum("kind", Some(validate_toolkind(&self.kind)))
+            .into()
     }
 }
 

@@ -11,6 +11,53 @@ pub enum SpecVersion {
 
 pub type ValidationResult = Result<(), ValidationErrors>;
 
+#[derive(Debug)]
+pub struct ValidationBuilder {
+    state: ValidationResult,
+}
+
+impl ValidationBuilder {
+    pub fn new() -> Self {
+        Self {
+            state: std::result::Result::Ok(()),
+        }
+    }
+
+    pub fn add_field(self, field_name: &str, error: Option<Result<(), ValidationError>>) -> Self {
+        let result = if let Some(error) = error {
+            error
+        } else {
+            std::result::Result::Ok(())
+        };
+
+        Self {
+            state: ValidationErrors::merge_field(self.state, field_name, result),
+        }
+    }
+
+    pub fn add_enum(self, enum_name: &str, error: Option<Result<(), ValidationError>>) -> Self {
+        let result = if let Some(error) = error {
+            error
+        } else {
+            std::result::Result::Ok(())
+        };
+
+        Self {
+            state: ValidationErrors::merge_enum(self.state, enum_name, result),
+        }
+    }
+
+    pub fn inner(&self) -> ValidationResult {
+        self.state.clone()
+    }
+}
+
+impl From<ValidationBuilder> for ValidationResult {
+    fn from(builder: ValidationBuilder) -> Self {
+        builder.inner()
+    }
+}
+
 pub trait Validate {
     fn validate(&self, version: SpecVersion) -> ValidationResult;
 }
@@ -79,7 +126,6 @@ impl ValidationErrors {
         enum_name: &str,
         enum_error: Result<(), ValidationError>,
     ) -> ValidationResult {
-        println!("Validation::merge_enum: {:?}", enum_error);
         match enum_error {
             Ok(()) => parent,
             Err(error) => {
