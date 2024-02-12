@@ -72,15 +72,11 @@ impl ValidationContext {
             self
         }
     }
-
-    pub fn inner(&self) -> ValidationResult {
-        self.state.clone()
-    }
 }
 
 impl From<ValidationContext> for ValidationResult {
     fn from(builder: ValidationContext) -> Self {
-        builder.inner()
+        builder.state
     }
 }
 
