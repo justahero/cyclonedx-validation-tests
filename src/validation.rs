@@ -9,6 +9,7 @@ pub enum SpecVersion {
     V1_5,
 }
 
+/// Contains all collected validation errors.
 #[derive(Debug, Clone)]
 pub enum ValidationResult {
     Passed,
@@ -28,6 +29,22 @@ impl ValidationResult {
 
     pub fn has_errors(&self) -> bool {
         matches!(self, ValidationResult::Error(_))
+    }
+
+    pub fn errors(&self) -> Option<&ValidationErrors> {
+        match self {
+            ValidationResult::Passed => None,
+            ValidationResult::Error(errors) => Some(errors),
+        }
+    }
+}
+
+impl From<ValidationResult> for ValidationErrors {
+    fn from(value: ValidationResult) -> Self {
+        match value {
+            ValidationResult::Passed => ValidationErrors::default(),
+            ValidationResult::Error(errors) => errors,
+        }
     }
 }
 
@@ -118,7 +135,7 @@ pub enum ValidationErrorsKind {
     List(BTreeMap<usize, Box<ValidationErrors>>),
     /// Contains the list of validation errors for a single field, e.g. struct field.
     Field(Vec<ValidationError>),
-    /// Represents an error for an Enum variant.
+    /// Represents a single error for an Enum variant.
     Enum(ValidationError),
 }
 
@@ -142,11 +159,7 @@ impl ValidationErrors {
         field_name: &str,
         validation_error: ValidationError,
     ) -> ValidationResult {
-        let mut errors = match parent {
-            ValidationResult::Passed => ValidationErrors::default(),
-            ValidationResult::Error(errors) => errors,
-        };
-
+        let mut errors: ValidationErrors = parent.into();
         errors.add_field(field_name, validation_error);
         ValidationResult::Error(errors)
     }
@@ -157,11 +170,7 @@ impl ValidationErrors {
         enum_name: &str,
         validation_error: ValidationError,
     ) -> ValidationResult {
-        let mut errors = match parent {
-            ValidationResult::Passed => ValidationErrors::default(),
-            ValidationResult::Error(errors) => errors,
-        };
-
+        let mut errors: ValidationErrors = parent.into();
         errors.add_enum(enum_name, validation_error);
         ValidationResult::Error(errors)
     }
@@ -172,11 +181,7 @@ impl ValidationErrors {
         struct_name: &str,
         validation_errors: ValidationErrors,
     ) -> ValidationResult {
-        let mut errors = match parent {
-            ValidationResult::Passed => ValidationErrors::default(),
-            ValidationResult::Error(errors) => errors,
-        };
-
+        let mut errors: ValidationErrors = parent.into();
         errors.add_nested(
             struct_name,
             ValidationErrorsKind::Struct(Box::new(validation_errors)),
@@ -201,11 +206,7 @@ impl ValidationErrors {
         if child_errors.is_empty() {
             parent
         } else {
-            let mut errors = match parent {
-                ValidationResult::Passed => ValidationErrors::default(),
-                ValidationResult::Error(errors) => errors,
-            };
-
+            let mut errors: ValidationErrors = parent.into();
             errors.add_nested(field_name, ValidationErrorsKind::List(child_errors));
             ValidationResult::Error(errors)
         }
