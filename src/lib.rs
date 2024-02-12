@@ -104,8 +104,16 @@ pub struct Bom {
 impl Validate for Bom {
     fn validate(&self, version: validation::SpecVersion) -> Result<(), ValidationErrors> {
         ValidationContext::new()
-            .add_field("serial_number", self.serial_number.as_ref().map(|sn| validate_string(sn)))
-            .add_struct("meta_data", self.meta_data.as_ref().map(|metadata| metadata.validate(version)))
+            .add_field(
+                "serial_number",
+                self.serial_number.as_ref().map(|sn| validate_string(sn)),
+            )
+            .add_struct(
+                "meta_data",
+                self.meta_data
+                    .as_ref()
+                    .map(|metadata| metadata.validate(version)),
+            )
             .into()
     }
 }
