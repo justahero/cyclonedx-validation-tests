@@ -9,14 +9,16 @@ pub enum SpecVersion {
     V1_5,
 }
 
+/// TODO: the `Result` is not meant to be used as shortcut or to raise errors, rather to collect all errors
+/// avoid using `?` operator
 pub type ValidationResult = Result<(), ValidationErrors>;
 
 #[derive(Debug)]
-pub struct ValidationBuilder {
+pub struct ValidationContext {
     state: ValidationResult,
 }
 
-impl ValidationBuilder {
+impl ValidationContext {
     pub fn new() -> Self {
         Self {
             state: std::result::Result::Ok(()),
@@ -76,16 +78,18 @@ impl ValidationBuilder {
     }
 }
 
-impl From<ValidationBuilder> for ValidationResult {
-    fn from(builder: ValidationBuilder) -> Self {
+impl From<ValidationContext> for ValidationResult {
+    fn from(builder: ValidationContext) -> Self {
         builder.inner()
     }
 }
 
+/// The trait that SBOM structs need to implement to validate their content.
 pub trait Validate {
     fn validate(&self, version: SpecVersion) -> ValidationResult;
 }
 
+/// A single validation error with a message, useful to log / display for user.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidationError {
     pub message: String,
@@ -99,6 +103,7 @@ impl ValidationError {
     }
 }
 
+/// Implements possible hierarchy of a structured SBOM to collect all [`ValidationError`] in.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationErrorsKind {
     /// Collects all field validation errors in context of a struct

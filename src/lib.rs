@@ -1,6 +1,6 @@
 mod validation;
 
-use validation::{SpecVersion, Validate, ValidationBuilder, ValidationError, ValidationErrors};
+use validation::{SpecVersion, Validate, ValidationContext, ValidationError, ValidationErrors};
 
 fn validate_timestamp(input: &str) -> Result<(), validation::ValidationError> {
     if input.contains("a") {
@@ -44,7 +44,7 @@ pub struct Tool {
 
 impl Validate for Tool {
     fn validate(&self, _version: validation::SpecVersion) -> Result<(), ValidationErrors> {
-        ValidationBuilder::new()
+        ValidationContext::new()
             .add_field(
                 "vendor",
                 self.vendor.as_ref().map(|vendor| validate_vendor(&vendor)),
@@ -73,7 +73,7 @@ impl Validate for Metadata {
                 .collect::<Vec<_>>()
         });
 
-        let mut builder = ValidationBuilder::new().add_list("tools", children);
+        let mut builder = ValidationContext::new().add_list("tools", children);
 
         match version {
             SpecVersion::V1_4 => {
@@ -103,7 +103,7 @@ pub struct Bom {
 /// The implementation should be easy to digest
 impl Validate for Bom {
     fn validate(&self, version: validation::SpecVersion) -> Result<(), ValidationErrors> {
-        ValidationBuilder::new()
+        ValidationContext::new()
             .add_field("serial_number", self.serial_number.as_ref().map(|sn| validate_string(sn)))
             .add_struct("meta_data", self.meta_data.as_ref().map(|metadata| metadata.validate(version)))
             .into()
