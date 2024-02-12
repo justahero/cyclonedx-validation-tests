@@ -24,26 +24,50 @@ impl ValidationBuilder {
     }
 
     pub fn add_field(self, field_name: &str, error: Option<Result<(), ValidationError>>) -> Self {
-        let result = if let Some(error) = error {
-            error
+        if let Some(Err(error)) = error {
+            Self {
+                state: ValidationErrors::merge_field(self.state, field_name, Err(error)),
+            }
         } else {
-            std::result::Result::Ok(())
-        };
-
-        Self {
-            state: ValidationErrors::merge_field(self.state, field_name, result),
+            self
         }
     }
 
     pub fn add_enum(self, enum_name: &str, error: Option<Result<(), ValidationError>>) -> Self {
-        let result = if let Some(error) = error {
-            error
+        if let Some(Err(error)) = error {
+            Self {
+                state: ValidationErrors::merge_enum(self.state, enum_name, Err(error)),
+            }
         } else {
-            std::result::Result::Ok(())
-        };
+            self
+        }
+    }
 
-        Self {
-            state: ValidationErrors::merge_enum(self.state, enum_name, result),
+    pub fn add_list(
+        self,
+        field_name: &str,
+        children: Option<Vec<Result<(), ValidationErrors>>>,
+    ) -> Self {
+        if let Some(children) = children {
+            Self {
+                state: ValidationErrors::merge_list(self.state, field_name, children),
+            }
+        } else {
+            self
+        }
+    }
+
+    pub fn add_struct(
+        self,
+        struct_name: &str,
+        errors: Option<Result<(), ValidationErrors>>,
+    ) -> Self {
+        if let Some(Err(errors)) = errors {
+            Self {
+                state: ValidationErrors::merge_struct(self.state, struct_name, Err(errors)),
+            }
+        } else {
+            self
         }
     }
 

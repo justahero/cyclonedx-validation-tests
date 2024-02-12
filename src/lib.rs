@@ -45,8 +45,14 @@ pub struct Tool {
 impl Validate for Tool {
     fn validate(&self, _version: validation::SpecVersion) -> Result<(), ValidationErrors> {
         ValidationBuilder::new()
-            .add_field("vendor", self.vendor.as_ref().map(|vendor| validate_vendor(&vendor)))
-            .add_field("name", self.name.as_ref().map(|name| validate_string(&name)))
+            .add_field(
+                "vendor",
+                self.vendor.as_ref().map(|vendor| validate_vendor(&vendor)),
+            )
+            .add_field(
+                "name",
+                self.name.as_ref().map(|name| validate_string(&name)),
+            )
             .add_enum("kind", Some(validate_toolkind(&self.kind)))
             .into()
     }
@@ -60,38 +66,31 @@ pub struct Metadata {
 
 impl Validate for Metadata {
     fn validate(&self, version: SpecVersion) -> Result<(), ValidationErrors> {
-        let mut result = std::result::Result::Ok(());
+        let children = self.tools.as_ref().map(|tools| {
+            tools
+                .iter()
+                .map(|tool| tool.validate(version))
+                .collect::<Vec<_>>()
+        });
 
-        if let Some(tools) = &self.tools {
-            result = ValidationErrors::merge_list(
-                result,
-                "tools",
-                tools.iter().map(|tool| tool.validate(version)).collect(),
-            );
-        }
+        let mut builder = ValidationBuilder::new().add_list("tools", children);
 
         match version {
             SpecVersion::V1_4 => {
-                if let Some(timestamp) = &self.timestamp {
-                    result = ValidationErrors::merge_field(
-                        result,
-                        "timestamp",
-                        validate_string(&timestamp),
-                    );
-                }
+                builder = builder.add_field(
+                    "timestamp",
+                    self.timestamp.as_ref().map(|t| validate_string(t)),
+                );
             }
             _ => {
-                if let Some(timestamp) = &self.timestamp {
-                    result = ValidationErrors::merge_field(
-                        result,
-                        "timestamp",
-                        validate_timestamp(&timestamp),
-                    );
-                }
+                builder = builder.add_field(
+                    "timestamp",
+                    self.timestamp.as_ref().map(|t| validate_timestamp(t)),
+                );
             }
         }
 
-        result
+        builder.into()
     }
 }
 
@@ -104,19 +103,10 @@ pub struct Bom {
 /// The implementation should be easy to digest
 impl Validate for Bom {
     fn validate(&self, version: validation::SpecVersion) -> Result<(), ValidationErrors> {
-        let mut result = std::result::Result::Ok(());
-
-        if let Some(number) = &self.serial_number {
-            result =
-                ValidationErrors::merge_field(result, "serial_number", validate_string(&number));
-        };
-
-        if let Some(metadata) = &self.meta_data {
-            result =
-                ValidationErrors::merge_struct(result, "meta_data", metadata.validate(version));
-        }
-
-        result
+        ValidationBuilder::new()
+            .add_field("serial_number", self.serial_number.as_ref().map(|sn| validate_string(sn)))
+            .add_struct("meta_data", self.meta_data.as_ref().map(|metadata| metadata.validate(version)))
+            .into()
     }
 }
 
