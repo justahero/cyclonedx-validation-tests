@@ -60,7 +60,17 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_field(self, field_name: &str, error: Option<Result<(), ValidationError>>) -> Self {
+    pub fn add_field<F, T, Input>(self, field_name: &str, field: Input, function: F) -> Self
+    where
+        F: FnOnce(T) -> Result<(), ValidationError>,
+        Input: Into<Option<T>>,
+    {
+        let input: Option<_> = field.into();
+        let error = match input {
+            Some(input) => Some(function(input)),
+            None => None,
+        };
+
         if let Some(Err(error)) = error {
             Self {
                 state: ValidationErrors::merge_field(self.state, field_name, error),
