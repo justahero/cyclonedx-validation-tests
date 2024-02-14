@@ -1,6 +1,6 @@
 mod validation;
 
-use validation::{SpecVersion, Validate, ValidationContext, ValidationError, ValidationErrors};
+use validation::{SpecVersion, Validate, ValidationContext, ValidationError, ValidationResult};
 
 fn validate_timestamp(input: &str) -> Result<(), validation::ValidationError> {
     if input.contains("a") {
@@ -43,16 +43,10 @@ pub struct Tool {
 }
 
 impl Validate for Tool {
-    fn validate(&self, _version: validation::SpecVersion) -> Result<(), ValidationErrors> {
+    fn validate(&self, _version: validation::SpecVersion) -> ValidationResult {
         ValidationContext::new()
-            .add_field(
-                "vendor",
-                self.vendor.as_ref().map(|vendor| validate_vendor(&vendor)),
-            )
-            .add_field(
-                "name",
-                self.name.as_ref().map(|name| validate_string(&name)),
-            )
+            .add_field("vendor", self.vendor.as_deref(), validate_vendor)
+            .add_field("name", self.name.as_deref(), validate_string)
             .add_enum("kind", Some(validate_toolkind(&self.kind)))
             .into()
     }
@@ -65,7 +59,7 @@ pub struct Metadata {
 }
 
 impl Validate for Metadata {
-    fn validate(&self, version: SpecVersion) -> Result<(), ValidationErrors> {
+    fn validate(&self, version: SpecVersion) -> ValidationResult {
         let children = self.tools.as_ref().map(|tools| {
             tools
                 .iter()
@@ -77,16 +71,12 @@ impl Validate for Metadata {
 
         match version {
             SpecVersion::V1_4 => {
-                builder = builder.add_field(
-                    "timestamp",
-                    self.timestamp.as_ref().map(|t| validate_string(t)),
-                );
+                builder =
+                    builder.add_field("timestamp", self.timestamp.as_deref(), validate_string);
             }
             _ => {
-                builder = builder.add_field(
-                    "timestamp",
-                    self.timestamp.as_ref().map(|t| validate_timestamp(t)),
-                );
+                builder =
+                    builder.add_field("timestamp", self.timestamp.as_deref(), validate_timestamp);
             }
         }
 
@@ -96,22 +86,41 @@ impl Validate for Metadata {
 
 #[derive(Debug)]
 pub struct Bom {
-    pub serial_number: Option<String>,
+    /// required field
+    pub serial_number: String,
+    /// optional field
+    //pub serial_number: Option<String>,
     pub meta_data: Option<Metadata>,
 }
 
 /// The implementation should be easy to digest
 impl Validate for Bom {
-    fn validate(&self, version: validation::SpecVersion) -> Result<(), ValidationErrors> {
+    fn validate(&self, version: validation::SpecVersion) -> ValidationResult {
         ValidationContext::new()
-            .add_field("serial_number", self.serial_number.as_ref().map(|sn| validate_string(sn)))
-            .add_struct("meta_data", self.meta_data.as_ref().map(|metadata| metadata.validate(version)))
+            .add_field(
+                "serial_number",
+                self.serial_number.as_ref(),
+                validate_string,
+            )
+            .add_struct(
+                "meta_data",
+                self.meta_data
+                    .as_ref()
+                    .map(|metadata| metadata.validate(version)),
+            )
             .into()
+
+        /*
+        ValidationContext::new()
+            .add_field(pass_arg!("serial_number", validate_string))
+            .add_struct(pass_arg!("meta_data", version))
+            .into()
+         */
     }
 }
 
 /// Validates the bom according to a given [`SpecVersion`].
-pub fn validate_bom(version: SpecVersion, bom: Bom) -> Result<(), ValidationErrors> {
+pub fn validate_bom(version: SpecVersion, bom: Bom) -> ValidationResult {
     bom.validate(version)
 }
 
@@ -122,7 +131,7 @@ mod tests {
     #[test]
     fn validate_succeeds() {
         let bom = Bom {
-            serial_number: Some("1234".to_string()),
+            serial_number: "1234".to_string(),
             meta_data: Some(Metadata {
                 timestamp: Some(String::from("2024-01-02")),
                 tools: Some(vec![Tool {
@@ -133,13 +142,13 @@ mod tests {
             }),
         };
 
-        assert!(dbg!(validate_bom(SpecVersion::V1_3, bom)).is_ok());
+        assert!(dbg!(validate_bom(SpecVersion::V1_3, bom)).passed());
     }
 
     #[test]
     fn validate_fails() {
         let bom = Bom {
-            serial_number: Some("1234".to_string()),
+            serial_number: "1234".to_string(),
             meta_data: Some(Metadata {
                 timestamp: Some(String::from("2024-01-02")),
                 tools: Some(vec![
@@ -157,6 +166,6 @@ mod tests {
             }),
         };
 
-        assert!(dbg!(validate_bom(SpecVersion::V1_4, bom)).is_err());
+        assert!(dbg!(validate_bom(SpecVersion::V1_4, bom)).has_errors());
     }
 }
