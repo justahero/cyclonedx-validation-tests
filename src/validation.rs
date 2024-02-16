@@ -60,18 +60,13 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_field<F, T, Input>(self, field_name: &str, field: Input, function: F) -> Self
-    where
-        F: FnOnce(T) -> Result<(), ValidationError>,
-        Input: Into<Option<T>>,
-    {
-        let input: Option<_> = field.into();
-        let error = match input {
-            Some(input) => Some(function(input)),
-            None => None,
-        };
-
-        if let Some(Err(error)) = error {
+    pub fn add_field<T>(
+        self,
+        field_name: &str,
+        field: impl Into<Option<T>>,
+        validation: impl FnOnce(T) -> Result<(), ValidationError>,
+    ) -> Self {
+        if let Some(Err(error)) = field.into().map(validation) {
             Self {
                 state: ValidationErrors::merge_field(self.state, field_name, error),
             }
@@ -80,8 +75,13 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_enum(self, enum_name: &str, error: Option<Result<(), ValidationError>>) -> Self {
-        if let Some(Err(error)) = error {
+    pub fn add_enum<T>(
+        self,
+        enum_name: &str,
+        r#enum: impl Into<Option<T>>,
+        validation: impl FnOnce(T) -> Result<(), ValidationError>,
+    ) -> Self {
+        if let Some(Err(error)) = r#enum.into().map(validation) {
             Self {
                 state: ValidationErrors::merge_enum(self.state, enum_name, error),
             }
@@ -90,18 +90,28 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_list(self, field_name: &str, children: Option<Vec<ValidationResult>>) -> Self {
-        if let Some(children) = children {
+    pub fn add_list<T, L: IntoIterator<Item = T>>(
+        self,
+        list_name: &str,
+        list: impl Into<Option<L>>,
+        validation: impl Fn(L) -> Vec<ValidationResult>,
+    ) -> Self {
+        if let Some(children) = list.into().map(validation) {
             Self {
-                state: ValidationErrors::merge_list(self.state, field_name, children),
+                state: ValidationErrors::merge_list(self.state, list_name, children),
             }
         } else {
             self
         }
     }
 
-    pub fn add_struct(self, struct_name: &str, errors: Option<ValidationResult>) -> Self {
-        if let Some(ValidationResult::Error(validation_errors)) = errors {
+    pub fn add_struct<T>(
+        self,
+        struct_name: &str,
+        r#struct: impl Into<Option<T>>,
+        validation: impl FnOnce(T) -> ValidationResult,
+    ) -> Self {
+        if let Some(ValidationResult::Error(validation_errors)) = r#struct.into().map(validation) {
             Self {
                 state: ValidationErrors::merge_struct(self.state, struct_name, validation_errors),
             }

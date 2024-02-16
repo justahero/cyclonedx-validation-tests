@@ -47,7 +47,7 @@ impl Validate for Tool {
         ValidationContext::new()
             .add_field("vendor", self.vendor.as_deref(), validate_vendor)
             .add_field("name", self.name.as_deref(), validate_string)
-            .add_enum("kind", Some(validate_toolkind(&self.kind)))
+            .add_enum("kind", &self.kind, validate_toolkind)
             .into()
     }
 }
@@ -60,14 +60,13 @@ pub struct Metadata {
 
 impl Validate for Metadata {
     fn validate(&self, version: SpecVersion) -> ValidationResult {
-        let children = self.tools.as_ref().map(|tools| {
-            tools
-                .iter()
-                .map(|tool| tool.validate(version))
-                .collect::<Vec<_>>()
-        });
-
-        let mut builder = ValidationContext::new().add_list("tools", children);
+        let mut builder =
+            ValidationContext::new().add_list("tools", self.tools.as_deref(), |tools: &[_]| {
+                tools
+                    .into_iter()
+                    .map(|tool| tool.validate(version))
+                    .collect()
+            });
 
         match version {
             SpecVersion::V1_4 => {
@@ -102,12 +101,9 @@ impl Validate for Bom {
                 self.serial_number.as_ref(),
                 validate_string,
             )
-            .add_struct(
-                "meta_data",
-                self.meta_data
-                    .as_ref()
-                    .map(|metadata| metadata.validate(version)),
-            )
+            .add_struct("meta_data", self.meta_data.as_ref(), |metadata: &_| {
+                metadata.validate(version)
+            })
             .into()
 
         /*
