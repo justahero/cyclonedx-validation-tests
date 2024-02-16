@@ -38,7 +38,8 @@ pub enum ToolKind {
 #[derive(Debug)]
 pub struct Tool {
     pub vendor: Option<String>,
-    pub name: Option<String>,
+    pub name: String,
+    pub lastname: Option<String>,
     pub kind: ToolKind,
 }
 
@@ -46,7 +47,8 @@ impl Validate for Tool {
     fn validate(&self, _version: validation::SpecVersion) -> ValidationResult {
         ValidationContext::new()
             .add_field("vendor", self.vendor.as_deref(), validate_vendor)
-            .add_field("name", self.name.as_deref(), validate_string)
+            .add_field("name", &*self.name, validate_string)
+            .add_field("lastname", self.lastname.as_deref(), validate_string)
             .add_enum("kind", &self.kind, validate_toolkind)
             .into()
     }
@@ -132,7 +134,8 @@ mod tests {
                 timestamp: Some(String::from("2024-01-02")),
                 tools: Some(vec![Tool {
                     vendor: Some(String::from("Vendor")),
-                    name: Some(String::from("dig")),
+                    name: String::from("dig"),
+                    lastname: Some(String::from("roe")),
                     kind: ToolKind::ScrewDriver,
                 }]),
             }),
@@ -150,12 +153,14 @@ mod tests {
                 tools: Some(vec![
                     Tool {
                         vendor: Some(String::from("Vendor")),
-                        name: Some(String::from("delv")),
+                        name: String::from("delv"),
+                        lastname: Some(String::from("hill")),
                         kind: ToolKind::ScrewDriver,
                     },
                     Tool {
                         vendor: Some(String::from("Vendor")),
-                        name: Some(String::from("dig")),
+                        name: String::from("dig"),
+                        lastname: Some(String::from("roe")),
                         kind: ToolKind::Hammer,
                     },
                 ]),
