@@ -90,11 +90,11 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_list<T, L: IntoIterator<Item = T>>(
+    pub fn add_list<T>(
         self,
         list_name: &str,
-        list: impl Into<Option<L>>,
-        validation: impl Fn(L) -> Vec<ValidationResult>,
+        list: impl Into<Option<T>>,
+        validation: impl Fn(T) -> Vec<ValidationResult>,
     ) -> Self {
         if let Some(children) = list.into().map(validation) {
             Self {
