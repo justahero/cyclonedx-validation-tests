@@ -166,6 +166,32 @@ pub struct ValidationErrors {
     pub(crate) inner: IndexMap<String, ValidationErrorsKind>,
 }
 
+#[allow(dead_code)]
+impl ValidationErrorsKind {
+    pub(crate) fn r#enum(error: &str) -> Self {
+        Self::Enum(ValidationError::new(error))
+    }
+
+    pub(crate) fn list(errors: &[(usize, ValidationErrors)]) -> Self {
+        let errors = errors
+            .into_iter()
+            .map(|(index, value)| (*index, value.clone()))
+            .collect::<BTreeMap<_, _>>();
+
+        Self::List(errors)
+    }
+
+    pub(crate) fn r#struct(errors: &[(&str, ValidationErrorsKind)]) -> Self {
+        let errors = errors
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.clone()))
+            .collect::<IndexMap<_, _>>();
+
+        Self::Struct(ValidationErrors { inner: errors })
+    }
+}
+
+/// TODO remove again
 impl From<Vec<(&str, ValidationErrorsKind)>> for ValidationErrors {
     fn from(errors: Vec<(&str, ValidationErrorsKind)>) -> Self {
         ValidationErrors {
