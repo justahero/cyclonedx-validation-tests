@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use indexmap::{map::Entry::Vacant, IndexMap};
+use indexmap::{
+    map::{Entry::Vacant, IntoIter},
+    IndexMap,
+};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum SpecVersion {
@@ -31,7 +34,7 @@ impl ValidationResult {
         matches!(self, ValidationResult::Error(_))
     }
 
-    pub fn errors(&self) -> Option<&ValidationErrors> {
+    pub fn errors(self) -> Option<ValidationErrors> {
         match self {
             ValidationResult::Passed => None,
             ValidationResult::Error(errors) => Some(errors),
@@ -139,6 +142,12 @@ pub struct ValidationError {
     pub message: String,
 }
 
+impl From<&str> for ValidationError {
+    fn from(message: &str) -> Self {
+        ValidationError::new(message)
+    }
+}
+
 impl ValidationError {
     pub fn new<T: ToString>(message: T) -> Self {
         Self {
@@ -166,32 +175,6 @@ pub struct ValidationErrors {
     pub(crate) inner: IndexMap<String, ValidationErrorsKind>,
 }
 
-#[allow(dead_code)]
-impl ValidationErrorsKind {
-    pub(crate) fn r#enum(error: &str) -> Self {
-        Self::Enum(ValidationError::new(error))
-    }
-
-    pub(crate) fn list(errors: &[(usize, ValidationErrors)]) -> Self {
-        let errors = errors
-            .into_iter()
-            .map(|(index, value)| (*index, value.clone()))
-            .collect::<BTreeMap<_, _>>();
-
-        Self::List(errors)
-    }
-
-    pub(crate) fn r#struct(errors: &[(&str, ValidationErrorsKind)]) -> Self {
-        let errors = errors
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value.clone()))
-            .collect::<IndexMap<_, _>>();
-
-        Self::Struct(ValidationErrors { inner: errors })
-    }
-}
-
-/// TODO remove again
 impl From<Vec<(&str, ValidationErrorsKind)>> for ValidationErrors {
     fn from(errors: Vec<(&str, ValidationErrorsKind)>) -> Self {
         ValidationErrors {
@@ -298,6 +281,15 @@ impl ValidationErrors {
         }
     }
 
+    pub fn errors(self) -> IntoIter<String, ValidationErrorsKind> {
+        self.inner.into_iter()
+    }
+
+    /// Returns the error with given name
+    pub fn error(&self, field: &str) -> Option<&ValidationErrorsKind> {
+        self.inner.get(&field.to_string())
+    }
+
     pub fn has_error(result: &Result<(), ValidationErrors>, field: &str) -> bool {
         match result {
             Ok(()) => false,
@@ -314,9 +306,54 @@ impl ValidationErrors {
     }
 }
 
+impl From<Vec<ValidationErrors>> for ValidationErrors {
+    fn from(errors: Vec<ValidationErrors>) -> Self {
+        // merge all errors into one struct.
+        let mut result = ValidationErrors::new();
+        for error in errors.into_iter() {
+            for (key, value) in error.inner.into_iter() {
+                result.inner.insert(key, value);
+            }
+        }
+        result
+    }
+}
+
+pub(crate) fn r#enum(enum_name: &str, error: impl Into<ValidationError>) -> ValidationErrors {
+    let mut result = ValidationErrors::default();
+    result.add_enum(enum_name, error.into());
+    result
+}
+
+pub(crate) fn r#struct(struct_name: &str, errors: ValidationErrors) -> ValidationErrors {
+    let mut result = ValidationErrors::default();
+    result.add_nested(struct_name, ValidationErrorsKind::Struct(errors));
+    result
+}
+
+pub(crate) fn list(field_name: &str, errors: &[(usize, ValidationErrors)]) -> ValidationErrors {
+    let list = errors
+        .into_iter()
+        .map(|(index, errors)| (*index, errors.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let mut result = ValidationErrors::default();
+    result.add_nested(field_name, ValidationErrorsKind::List(list));
+    result
+}
+
+pub(crate) fn field(field_name: &str, error: ValidationError) -> ValidationErrors {
+    let mut result = ValidationErrors::default();
+    result.add_field(field_name, error);
+    result
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ValidationError, ValidationErrors};
+    use crate::validation::{
+        field, r#enum, r#struct, SpecVersion, Validate, ValidationErrorsKind, ValidationResult,
+    };
+
+    use super::{ValidationContext, ValidationError, ValidationErrors};
 
     #[test]
     fn has_error() {
@@ -344,5 +381,53 @@ mod tests {
 
         errors.add_field("hello", ValidationError::new("again"));
         assert!(!errors.is_empty());
+    }
+
+    #[test]
+    fn build_validation_errors_enum() {
+        let errors = r#enum("hello", "world");
+        assert_eq!(
+            errors.error("hello"),
+            Some(&ValidationErrorsKind::Enum("world".into()))
+        );
+    }
+
+    #[test]
+    fn build_validation_errors_hierarchy() {
+        struct Nested {
+            name: String,
+        }
+
+        impl Validate for Nested {
+            fn validate(&self, _version: SpecVersion) -> ValidationResult {
+                ValidationContext::new()
+                    .add_field("name", &self.name, |_name| {
+                        Err(ValidationError::new("Failed"))
+                    })
+                    .into()
+            }
+        }
+
+        let validation_result: ValidationResult = ValidationContext::new()
+            .add_enum("test", 2, |_| Err("not a variant".into()))
+            .add_struct(
+                "nested",
+                Nested {
+                    name: "hello".to_string(),
+                },
+                |nested| nested.validate(SpecVersion::V1_3),
+            )
+            .into();
+
+        assert_eq!(
+            validation_result.errors(),
+            Some(
+                vec![
+                    r#enum("test", "not a variant"),
+                    r#struct("nested", field("name", "Failed".into())),
+                ]
+                .into()
+            )
+        );
     }
 }

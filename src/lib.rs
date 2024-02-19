@@ -114,7 +114,7 @@ pub fn validate_bom(version: SpecVersion, bom: Bom) -> ValidationResult {
 mod tests {
     use crate::{
         validate_bom,
-        validation::{SpecVersion, Validate, ValidationErrorsKind},
+        validation::{self, list, r#enum, r#struct, SpecVersion, Validate},
         Bom, Metadata, Tool, ToolKind,
     };
 
@@ -186,25 +186,16 @@ mod tests {
         };
 
         let validation_result = bom.validate(SpecVersion::V1_3);
+
         assert_eq!(
             validation_result.errors(),
-            Some(
-                &vec![(
-                    "meta_data",
-                    ValidationErrorsKind::r#struct(&[(
-                        "tools",
-                        ValidationErrorsKind::list(&[(
-                            1,
-                            vec![(
-                                "kind",
-                                ValidationErrorsKind::r#enum("Tool must not be a hammer")
-                            )]
-                            .into()
-                        )])
-                    )])
-                )]
-                .into()
-            )
+            Some(validation::r#struct(
+                "meta_data",
+                validation::list(
+                    "tools",
+                    &[(1, validation::r#enum("kind", "Tool must not be a hammer"))]
+                ),
+            ))
         );
     }
 }
