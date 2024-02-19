@@ -114,9 +114,7 @@ pub fn validate_bom(version: SpecVersion, bom: Bom) -> ValidationResult {
 mod tests {
     use crate::{
         validate_bom,
-        validation::{
-            SpecVersion, Validate, ValidationError, ValidationErrors, ValidationErrorsKind,
-        },
+        validation::{SpecVersion, Validate, ValidationError, ValidationErrorsKind},
         Bom, Metadata, Tool, ToolKind,
     };
 
@@ -190,32 +188,31 @@ mod tests {
         let validation_result = bom.validate(SpecVersion::V1_3);
         assert_eq!(
             validation_result.errors(),
-            Some(&ValidationErrors {
-                inner: [(
-                    "meta_data".to_string(),
-                    ValidationErrorsKind::Struct(ValidationErrors {
-                        inner: [(
-                            "tools".to_string(),
+            Some(
+                &vec![(
+                    "meta_data",
+                    ValidationErrorsKind::Struct(
+                        vec![(
+                            "tools",
                             ValidationErrorsKind::List(
                                 [(
                                     1,
-                                    ValidationErrors {
-                                        inner: [(
-                                            "kind".to_string(),
-                                            ValidationErrorsKind::Enum(ValidationError::new(
-                                                "Tool must not be a hammer"
-                                            ))
-                                        )].into()
-                                    }
+                                    vec![(
+                                        "kind",
+                                        ValidationErrorsKind::Enum(ValidationError::new(
+                                            "Tool must not be a hammer"
+                                        ))
+                                    )]
+                                    .into()
                                 )]
                                 .into()
                             )
                         )]
                         .into()
-                    })
+                    )
                 )]
                 .into()
-            }),
+            )
         );
     }
 }

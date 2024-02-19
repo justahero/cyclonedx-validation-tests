@@ -10,7 +10,7 @@ pub enum SpecVersion {
 }
 
 /// Contains all collected validation errors.
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone)]
 pub enum ValidationResult {
     Passed,
     Error(ValidationErrors),
@@ -164,6 +164,17 @@ pub enum ValidationErrorsKind {
 pub struct ValidationErrors {
     /// Maps a name to a set of context errors.
     pub(crate) inner: IndexMap<String, ValidationErrorsKind>,
+}
+
+impl From<Vec<(&str, ValidationErrorsKind)>> for ValidationErrors {
+    fn from(errors: Vec<(&str, ValidationErrorsKind)>) -> Self {
+        ValidationErrors {
+            inner: errors
+                .into_iter()
+                .map(|(key, value)| (key.to_string(), value.clone()))
+                .collect::<IndexMap<_, _>>(),
+        }
+    }
 }
 
 impl ValidationErrors {
