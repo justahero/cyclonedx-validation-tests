@@ -150,9 +150,9 @@ impl ValidationError {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationErrorsKind {
     /// Collects all field validation errors in context of a struct
-    Struct(Box<ValidationErrors>),
+    Struct(ValidationErrors),
     /// Collects all child elements in context of a list, e.g. `Vec`
-    List(BTreeMap<usize, Box<ValidationErrors>>),
+    List(BTreeMap<usize, ValidationErrors>),
     /// Contains the list of validation errors for a single field, e.g. struct field.
     Field(Vec<ValidationError>),
     /// Represents a single error for an Enum variant.
@@ -204,7 +204,7 @@ impl ValidationErrors {
         let mut errors: ValidationErrors = parent.into();
         errors.add_nested(
             struct_name,
-            ValidationErrorsKind::Struct(Box::new(validation_errors)),
+            ValidationErrorsKind::Struct(validation_errors),
         );
         ValidationResult::Error(errors)
     }
@@ -219,7 +219,7 @@ impl ValidationErrors {
             .enumerate()
             .filter_map(|(index, result)| match result {
                 ValidationResult::Passed => None,
-                ValidationResult::Error(errors) => Some((index, Box::new(errors))),
+                ValidationResult::Error(errors) => Some((index, errors)),
             })
             .collect::<BTreeMap<_, _>>();
 
