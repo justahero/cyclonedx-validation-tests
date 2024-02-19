@@ -90,13 +90,17 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_list<T>(
+    pub fn add_list<I, T>(
         self,
         list_name: &str,
-        list: impl Into<Option<T>>,
-        validation: impl Fn(T) -> Vec<ValidationResult>,
-    ) -> Self {
-        if let Some(children) = list.into().map(validation) {
+        list: I,
+        validation: impl FnMut(T) -> ValidationResult,
+    ) -> Self
+    where
+        I: Iterator<Item = T>,
+    {
+        if let Some(list) = list.into() {
+            let children = list.map(validation).collect::<Vec<_>>();
             Self {
                 state: ValidationErrors::merge_list(self.state, list_name, children),
             }
@@ -202,10 +206,7 @@ impl ValidationErrors {
         validation_errors: ValidationErrors,
     ) -> ValidationResult {
         let mut errors: ValidationErrors = parent.into();
-        errors.add_nested(
-            struct_name,
-            ValidationErrorsKind::Struct(validation_errors),
-        );
+        errors.add_nested(struct_name, ValidationErrorsKind::Struct(validation_errors));
         ValidationResult::Error(errors)
     }
 

@@ -57,18 +57,13 @@ impl Validate for Tool {
 #[derive(Debug)]
 pub struct Metadata {
     pub timestamp: Option<String>,
-    pub tools: Option<Vec<Tool>>,
+    pub tools: Vec<Tool>,
 }
 
 impl Validate for Metadata {
     fn validate(&self, version: SpecVersion) -> ValidationResult {
-        let mut builder =
-            ValidationContext::new().add_list("tools", self.tools.as_deref(), |tools: &[_]| {
-                tools
-                    .into_iter()
-                    .map(|tool| tool.validate(version))
-                    .collect()
-            });
+        let mut builder = ValidationContext::new()
+            .add_list("tools", self.tools.iter(), |tool: &Tool| tool.validate(version));
 
         match version {
             SpecVersion::V1_4 => {
@@ -107,13 +102,6 @@ impl Validate for Bom {
                 metadata.validate(version)
             })
             .into()
-
-        /*
-        ValidationContext::new()
-            .add_field(pass_arg!("serial_number", validate_string))
-            .add_struct(pass_arg!("meta_data", version))
-            .into()
-         */
     }
 }
 
@@ -132,12 +120,12 @@ mod tests {
             serial_number: "1234".to_string(),
             meta_data: Some(Metadata {
                 timestamp: Some(String::from("2024-01-02")),
-                tools: Some(vec![Tool {
+                tools: vec![Tool {
                     vendor: Some(String::from("Vendor")),
                     name: String::from("dig"),
                     lastname: Some(String::from("roe")),
                     kind: ToolKind::ScrewDriver,
-                }]),
+                }],
             }),
         };
 
@@ -150,7 +138,7 @@ mod tests {
             serial_number: "1234".to_string(),
             meta_data: Some(Metadata {
                 timestamp: Some(String::from("2024-01-02")),
-                tools: Some(vec![
+                tools: vec![
                     Tool {
                         vendor: Some(String::from("Vendor")),
                         name: String::from("delv"),
@@ -163,7 +151,7 @@ mod tests {
                         lastname: Some(String::from("roe")),
                         kind: ToolKind::Hammer,
                     },
-                ]),
+                ],
             }),
         };
 
