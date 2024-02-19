@@ -13,7 +13,7 @@ pub enum SpecVersion {
 }
 
 /// Contains all collected validation errors.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValidationResult {
     Passed,
     Error(ValidationErrors),
@@ -121,16 +121,27 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_struct<T>(
+    pub fn add_struct<T>(self, struct_name: &str, r#struct: &T, version: SpecVersion) -> Self
+    where
+        T: Validate,
+    {
+        if let ValidationResult::Error(errors) = r#struct.validate(version) {
+            Self {
+                state: ValidationErrors::merge_struct(self.state, struct_name, errors),
+            }
+        } else {
+            self
+        }
+    }
+
+    pub fn add_struct_option<T: Validate>(
         self,
         struct_name: &str,
-        r#struct: impl Into<Option<T>>,
-        validation: impl FnOnce(T) -> ValidationResult,
+        r#struct: Option<&T>,
+        version: SpecVersion,
     ) -> Self {
-        if let Some(ValidationResult::Error(validation_errors)) = r#struct.into().map(validation) {
-            Self {
-                state: ValidationErrors::merge_struct(self.state, struct_name, validation_errors),
-            }
+        if let Some(r#struct) = r#struct {
+            self.add_struct(struct_name, r#struct, version)
         } else {
             self
         }
@@ -424,10 +435,10 @@ mod tests {
             .add_enum("test", 2, |_| Err("not a variant".into()))
             .add_struct(
                 "nested",
-                Nested {
+                &Nested {
                     name: "hello".to_string(),
                 },
-                |nested| nested.validate(SpecVersion::V1_3),
+                SpecVersion::V1_3,
             )
             .into();
 

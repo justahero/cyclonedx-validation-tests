@@ -125,9 +125,7 @@ impl Validate for Bom {
                 self.serial_number.as_ref(),
                 validate_string,
             )
-            .add_struct("meta_data", self.meta_data.as_ref(), |metadata: &_| {
-                metadata.validate(version)
-            })
+            .add_struct_option("meta_data", self.meta_data.as_ref(), version)
             .into()
     }
 }
