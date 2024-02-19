@@ -62,8 +62,8 @@ pub struct Metadata {
 
 impl Validate for Metadata {
     fn validate(&self, version: SpecVersion) -> ValidationResult {
-        let mut builder = ValidationContext::new()
-            .add_list("tools", self.tools.iter(), |tool: &Tool| tool.validate(version));
+        let mut builder =
+            ValidationContext::new().add_list("tools", &self.tools, |tool| tool.validate(version));
 
         match version {
             SpecVersion::V1_4 => {
@@ -112,7 +112,13 @@ pub fn validate_bom(version: SpecVersion, bom: Bom) -> ValidationResult {
 
 #[cfg(test)]
 mod tests {
-    use crate::{validate_bom, validation::SpecVersion, Bom, Metadata, Tool, ToolKind};
+    use crate::{
+        validate_bom,
+        validation::{
+            SpecVersion, Validate, ValidationError, ValidationErrors, ValidationErrorsKind,
+        },
+        Bom, Metadata, Tool, ToolKind,
+    };
 
     #[test]
     fn validate_succeeds() {
@@ -156,5 +162,60 @@ mod tests {
         };
 
         assert!(dbg!(validate_bom(SpecVersion::V1_4, bom)).has_errors());
+    }
+
+    #[test]
+    fn validation_errors() {
+        let bom = Bom {
+            serial_number: "1234".to_string(),
+            meta_data: Some(Metadata {
+                timestamp: Some(String::from("2024-01-02")),
+                tools: vec![
+                    Tool {
+                        vendor: Some(String::from("Vendor")),
+                        name: String::from("delv"),
+                        lastname: Some(String::from("hill")),
+                        kind: ToolKind::ScrewDriver,
+                    },
+                    Tool {
+                        vendor: Some(String::from("Vendor")),
+                        name: String::from("dig"),
+                        lastname: Some(String::from("roe")),
+                        kind: ToolKind::Hammer,
+                    },
+                ],
+            }),
+        };
+
+        let validation_result = bom.validate(SpecVersion::V1_3);
+        assert_eq!(
+            validation_result.errors(),
+            Some(&ValidationErrors {
+                inner: [(
+                    "meta_data".to_string(),
+                    ValidationErrorsKind::Struct(ValidationErrors {
+                        inner: [(
+                            "tools".to_string(),
+                            ValidationErrorsKind::List(
+                                [(
+                                    1,
+                                    ValidationErrors {
+                                        inner: [(
+                                            "kind".to_string(),
+                                            ValidationErrorsKind::Enum(ValidationError::new(
+                                                "Tool must not be a hammer"
+                                            ))
+                                        )].into()
+                                    }
+                                )]
+                                .into()
+                            )
+                        )]
+                        .into()
+                    })
+                )]
+                .into()
+            }),
+        );
     }
 }

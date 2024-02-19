@@ -10,7 +10,7 @@ pub enum SpecVersion {
 }
 
 /// Contains all collected validation errors.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,)]
 pub enum ValidationResult {
     Passed,
     Error(ValidationErrors),
@@ -90,22 +90,19 @@ impl ValidationContext {
         }
     }
 
-    pub fn add_list<I, T>(
+    pub fn add_list<'a, T, I>(
         self,
         list_name: &str,
-        list: I,
-        validation: impl FnMut(T) -> ValidationResult,
+        list: T,
+        validation: impl Fn(&'a I) -> ValidationResult,
     ) -> Self
     where
-        I: Iterator<Item = T>,
+        I: 'a,
+        T: IntoIterator<Item = &'a I>,
     {
-        if let Some(list) = list.into() {
-            let children = list.map(validation).collect::<Vec<_>>();
-            Self {
-                state: ValidationErrors::merge_list(self.state, list_name, children),
-            }
-        } else {
-            self
+        let children = list.into_iter().map(validation).collect::<Vec<_>>();
+        Self {
+            state: ValidationErrors::merge_list(self.state, list_name, children),
         }
     }
 
@@ -166,7 +163,7 @@ pub enum ValidationErrorsKind {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ValidationErrors {
     /// Maps a name to a set of context errors.
-    inner: IndexMap<String, ValidationErrorsKind>,
+    pub(crate) inner: IndexMap<String, ValidationErrorsKind>,
 }
 
 impl ValidationErrors {
