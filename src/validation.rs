@@ -66,15 +66,27 @@ impl ValidationContext {
     pub fn add_field<T>(
         self,
         field_name: &str,
-        field: impl Into<Option<T>>,
+        field: T,
         validation: impl FnOnce(T) -> Result<(), ValidationError>,
     ) -> Self {
-        if let Some(Err(error)) = field.into().map(validation) {
+        if let Err(error) = validation(field) {
             Self {
                 state: ValidationErrors::merge_field(self.state, field_name, error),
             }
         } else {
             self
+        }
+    }
+
+    pub fn add_field_option<T>(
+        self,
+        field_name: &str,
+        field: Option<T>,
+        validation: impl FnOnce(T) -> Result<(), ValidationError>,
+    ) -> Self {
+        match field {
+            Some(field) => self.add_field(field_name, field, validation),
+            None => self,
         }
     }
 

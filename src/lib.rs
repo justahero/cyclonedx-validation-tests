@@ -65,9 +65,13 @@ pub struct Tool {
 impl Validate for Tool {
     fn validate(&self, _version: validation::SpecVersion) -> ValidationResult {
         ValidationContext::new()
-            .add_field("vendor", self.vendor.as_deref(), validate_vendor)
+            .add_field_option("vendor", self.vendor.as_ref(), |vendor| {
+                validate_vendor(vendor)
+            })
             .add_field("name", &*self.name, validate_string)
-            .add_field("lastname", self.lastname.as_deref(), validate_string)
+            .add_field_option("lastname", self.lastname.as_ref(), |lastname| {
+                validate_string(lastname)
+            })
             .add_enum("kind", &self.kind, validate_toolkind)
             .into()
     }
@@ -86,12 +90,16 @@ impl Validate for Metadata {
 
         match version {
             SpecVersion::V1_4 => {
-                builder =
-                    builder.add_field("timestamp", self.timestamp.as_deref(), validate_string);
+                builder = builder.add_field_option("timestamp", self.timestamp.as_ref(), |t| {
+                    validate_string(&t)
+                });
             }
             _ => {
-                builder =
-                    builder.add_field("timestamp", self.timestamp.as_deref(), validate_timestamp);
+                builder = builder.add_field_option(
+                    "timestamp",
+                    self.timestamp.as_deref(),
+                    validate_timestamp,
+                );
             }
         }
 
