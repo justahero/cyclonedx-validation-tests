@@ -1,5 +1,7 @@
 mod validation;
 
+use std::ops::Deref;
+
 use validation::{SpecVersion, Validate, ValidationContext, ValidationError, ValidationResult};
 
 fn validate_timestamp(input: &str) -> Result<(), validation::ValidationError> {
@@ -29,6 +31,23 @@ fn validate_toolkind(kind: &ToolKind) -> Result<(), validation::ValidationError>
     Ok(())
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DateTime(pub(crate) String);
+
+impl From<&str> for DateTime {
+    fn from(value: &str) -> Self {
+        DateTime(value.to_string())
+    }
+}
+
+impl Deref for DateTime {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug)]
 pub enum ToolKind {
     Hammer,
@@ -56,7 +75,7 @@ impl Validate for Tool {
 
 #[derive(Debug)]
 pub struct Metadata {
-    pub timestamp: Option<String>,
+    pub timestamp: Option<DateTime>,
     pub tools: Vec<Tool>,
 }
 
@@ -114,8 +133,8 @@ pub fn validate_bom(version: SpecVersion, bom: Bom) -> ValidationResult {
 mod tests {
     use crate::{
         validate_bom,
-        validation::{self, list, r#enum, r#struct, SpecVersion, Validate},
-        Bom, Metadata, Tool, ToolKind,
+        validation::{self, SpecVersion, Validate},
+        Bom, DateTime, Metadata, Tool, ToolKind,
     };
 
     #[test]
@@ -123,7 +142,7 @@ mod tests {
         let bom = Bom {
             serial_number: "1234".to_string(),
             meta_data: Some(Metadata {
-                timestamp: Some(String::from("2024-01-02")),
+                timestamp: Some(DateTime::from("2024-01-02")),
                 tools: vec![Tool {
                     vendor: Some(String::from("Vendor")),
                     name: String::from("dig"),
@@ -141,7 +160,7 @@ mod tests {
         let bom = Bom {
             serial_number: "1234".to_string(),
             meta_data: Some(Metadata {
-                timestamp: Some(String::from("2024-01-02")),
+                timestamp: Some(DateTime::from("2024-01-02")),
                 tools: vec![
                     Tool {
                         vendor: Some(String::from("Vendor")),
@@ -167,7 +186,7 @@ mod tests {
         let bom = Bom {
             serial_number: "1234".to_string(),
             meta_data: Some(Metadata {
-                timestamp: Some(String::from("2024-01-02")),
+                timestamp: Some(DateTime::from("2024-01-02")),
                 tools: vec![
                     Tool {
                         vendor: Some(String::from("Vendor")),
